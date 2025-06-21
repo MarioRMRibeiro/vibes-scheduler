@@ -6,15 +6,15 @@ import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
 function getColorFromVotes(slotIndex, responses) {
   let yes = 0, no = 0;
   for (const res of responses) {
-    const vote = res.data[slotIndex]?.availability;
-    if (vote === 'yes') yes++;
-    if (vote === 'no') no++;
+    const vote = res.data[slotIndex];
+    if (vote?.availability === 'yes') yes++;
+    if (vote?.availability === 'no') no++;
   }
 
   const total = yes + no || 1;
   const r = Math.round((no / total) * 255);
   const g = Math.round((yes / total) * 255);
-  const b = 180;
+  const b = 180; // soft blue balance
 
   return `rgb(${r}, ${g}, ${b})`;
 }
@@ -24,6 +24,8 @@ export default function DMResponsesPage() {
   const [session, setSession] = useState(null);
   const [responses, setResponses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [recommendation, setRecommendation] = useState(null);
+  const [loadingAI, setLoadingAI] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -49,6 +51,23 @@ export default function DMResponsesPage() {
     loadData();
   }, [id]);
 
+  const handleRecommend = async () => {
+    setLoadingAI(true);
+    try {
+      const res = await fetch('/api/recommend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session: { ...session, responses } }),
+      });
+
+      const data = await res.json();
+      setRecommendation(data.recommendation);
+    } catch (err) {
+      alert('Failed to get recommendation');
+    }
+    setLoadingAI(false);
+  };
+
   if (loading) return <div className="text-white p-6">Loading responses...</div>;
   if (!session) return <div className="text-white p-6">Session not found</div>;
 
@@ -56,6 +75,19 @@ export default function DMResponsesPage() {
     <div className="min-h-screen bg-gray-900 text-white p-6">
       <div className="max-w-4xl mx-auto space-y-6">
         <h1 className="text-3xl font-bold text-center mb-4">🧙 Responses for "{session.sessionName}"</h1>
+
+        <button
+          onClick={handleRecommend}
+          className="bg-purple-600 hover:bg-purple-700 px-5 py-3 rounded-lg text-white font-bold w-full"
+        >
+          {loadingAI ? 'Thinking...' : '🔮 Recommend Best Time'}
+        </button>
+
+        {recommendation && (
+          <div className="bg-purple-800 mt-4 p-4 rounded-xl text-white text-lg shadow">
+            <strong>🧠 AI Suggestion:</strong> {recommendation}
+          </div>
+        )}
 
         <div className="bg-gray-700 p-4 rounded-xl shadow space-y-2">
           <h2 className="text-2xl font-bold text-center mb-2">🗓 Timeslot Overview</h2>
@@ -93,7 +125,9 @@ export default function DMResponsesPage() {
                   <p className="font-medium">
                     {slot.date} — {slot.period} — {vote.availability === 'yes' ? '✅' : '❌'}
                   </p>
-                  {vote.comment && <p className="text-sm italic text-gray-300">“{vote.comment}”</p>}
+                  {vote.comment && (
+                    <p className="text-sm italic text-gray-300">“{vote.comment}”</p>
+                  )}
                 </div>
               );
             })}
